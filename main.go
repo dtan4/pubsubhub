@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"os"
 
 	"cloud.google.com/go/pubsub"
@@ -22,9 +22,9 @@ const (
 
 func subscribe(ctx context.Context, s *pubsub.Subscription) error {
 	err := s.Receive(ctx, func(ctx context.Context, m *pubsub.Message) {
-		fmt.Printf("[subscription:%s message:%s] %s\n", s.ID(), m.ID, string(m.Data))
+		log.Printf("[subscription:%s message:%s] %s", s.ID(), m.ID, string(m.Data))
 		m.Ack()
-		fmt.Printf("[subscription:%s message:%s] ACK\n", s.ID(), m.ID)
+		log.Printf("[subscription:%s message:%s] ACK", s.ID(), m.ID)
 	})
 	if err != nil {
 		return errors.Wrapf(err, "subscribe error: %s", s.ID())
@@ -35,7 +35,7 @@ func subscribe(ctx context.Context, s *pubsub.Subscription) error {
 
 func run(args []string) int {
 	if len(args) != 2 {
-		fmt.Fprintln(os.Stderr, usage)
+		log.Println(usage)
 		return exitError
 	}
 	projectID := args[1]
@@ -43,7 +43,7 @@ func run(args []string) int {
 	ctx := context.Background()
 	client, err := pubsub.NewClient(ctx, projectID)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		log.Println(err)
 		return exitError
 	}
 
@@ -57,13 +57,13 @@ func run(args []string) int {
 		}
 
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			log.Println(err)
 			return exitError
 		}
 
 		c, err := s.Config(ctx)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
+			log.Println(err)
 			return exitError
 		}
 
@@ -80,14 +80,14 @@ func run(args []string) int {
 	for _, s := range ss {
 		s := s
 		g.Go(func() error {
-			fmt.Printf("Start subscribing %s...\n", s.ID())
+			log.Printf("Start subscribing %s...", s.ID())
 
 			return subscribe(ctx, s)
 		})
 	}
 
 	if err := g.Wait(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		log.Println(err)
 		return exitError
 	}
 
