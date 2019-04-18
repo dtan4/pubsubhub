@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"os"
+	"os/signal"
+	"time"
 
 	"cloud.google.com/go/pubsub"
 	"github.com/pkg/errors"
@@ -13,6 +15,10 @@ import (
 
 const (
 	usage = "pubsubhub <GCP_PROJECT_ID>"
+)
+
+const (
+	defaultTimeout = 1 * time.Minute
 )
 
 const (
@@ -70,6 +76,8 @@ func subscribe(ctx context.Context, s *pubsub.Subscription) error {
 		return errors.Wrapf(err, "subscribe error: %s", s.ID())
 	}
 
+	log.Printf("[subscription:%s] Stopping...", s.ID())
+
 	return nil
 }
 
@@ -88,29 +96,45 @@ func run(args []string) int {
 	}
 	ps := NewPubSubClient(client)
 
-	ss, err := ps.ListSubscriptions(ctx)
-	if err != nil {
-		log.Println(err)
-		return exitError
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+
+	for {
+		select {
+		case <-sigCh:
+			log.Println("Terminating...")
+			return exitOK
+		case <-ctx.Done():
+			return exitOK
+		default:
+			log.Println("Retrieving subscriptions...")
+
+			ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+			defer cancel()
+
+			ss, err := ps.ListSubscriptions(ctx)
+			if err != nil {
+				log.Println(err)
+				return exitError
+			}
+
+			g, ctx := errgroup.WithContext(ctx)
+
+			for _, s := range ss {
+				s := s
+				g.Go(func() error {
+					log.Printf("Start subscribing %s...", s.ID())
+
+					return subscribe(ctx, s)
+				})
+			}
+
+			if err := g.Wait(); err != nil {
+				log.Println(err)
+				return exitError
+			}
+		}
 	}
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	for _, s := range ss {
-		s := s
-		g.Go(func() error {
-			log.Printf("Start subscribing %s...", s.ID())
-
-			return subscribe(ctx, s)
-		})
-	}
-
-	if err := g.Wait(); err != nil {
-		log.Println(err)
-		return exitError
-	}
-
-	return exitOK
 }
 
 func main() {
