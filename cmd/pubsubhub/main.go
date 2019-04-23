@@ -89,6 +89,9 @@ func run(args []string) int {
 	projectID := args[1]
 
 	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	client, err := pubsub.NewClient(ctx, projectID)
 	if err != nil {
 		log.Println(err)
@@ -99,40 +102,38 @@ func run(args []string) int {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt)
 
+	go func() {
+		<-sigCh
+		log.Println("Terminating...")
+		cancel()
+	}()
+
 	for {
-		select {
-		case <-sigCh:
-			log.Println("Terminating...")
-			return exitOK
-		case <-ctx.Done():
-			return exitOK
-		default:
-			log.Println("Retrieving subscriptions...")
+		log.Println("Retrieving subscriptions...")
 
-			ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
-			defer cancel()
+		ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
+		defer cancel()
 
-			ss, err := ps.ListSubscriptions(ctx)
-			if err != nil {
-				log.Println(err)
-				return exitError
-			}
+		ss, err := ps.ListSubscriptions(ctx)
+		if err != nil {
+			log.Println(err)
+			return exitError
+		}
 
-			g, ctx := errgroup.WithContext(ctx)
+		g, ctx := errgroup.WithContext(ctx)
 
-			for _, s := range ss {
-				s := s
-				g.Go(func() error {
-					log.Printf("Start subscribing %s...", s.ID())
+		for _, s := range ss {
+			s := s
+			g.Go(func() error {
+				log.Printf("Start subscribing %s...", s.ID())
 
-					return subscribe(ctx, s)
-				})
-			}
+				return subscribe(ctx, s)
+			})
+		}
 
-			if err := g.Wait(); err != nil {
-				log.Println(err)
-				return exitError
-			}
+		if err := g.Wait(); err != nil {
+			log.Println(err)
+			return exitError
 		}
 	}
 }
