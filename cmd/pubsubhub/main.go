@@ -139,5 +139,5 @@ func run(args []string) int {
 }
 
 func main() {
-	run(os.Args)
+	os.Exit(run(os.Args))
 }
