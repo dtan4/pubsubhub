@@ -109,6 +109,12 @@ func run(args []string) int {
 	}()
 
 	for {
+		select {
+		case <-ctx.Done():
+			return exitOK
+		default:
+		}
+
 		log.Println("Retrieving subscriptions...")
 
 		ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
