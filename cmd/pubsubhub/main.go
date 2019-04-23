@@ -139,5 +139,7 @@ func run(args []string) int {
 }
 
 func main() {
+	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+
 	os.Exit(run(os.Args))
 }
